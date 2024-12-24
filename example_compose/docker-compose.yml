@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  logger_service:
+    build: .
+    container_name: logger_service
+    volumes:
+      - .:/app
+    command: >
+      sh -c "
+      while true; do
+        python /app/test_logger.py;
+        sleep 5;
+      done"
