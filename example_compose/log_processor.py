@@ -42,15 +42,30 @@ CREATE TABLE IF NOT EXISTS timestamp (
 conn.commit()
 
 def get_last_processed_timestamp():
-    cursor.execute('SELECT last_processed FROM timestamp ORDER BY id DESC LIMIT 1')
+    cursor.execute('SELECT last_processed FROM timestamp WHERE id=1')
     row = cursor.fetchone()
     return row[0] if row else None
 
 def update_last_processed_timestamp(timestamp):
-    cursor.execute('INSERT INTO timestamp (last_processed) VALUES (?)', (timestamp,))
+    cursor.execute('INSERT OR REPLACE INTO timestamp (id, last_processed) VALUES (?, ?)', (1, timestamp))
     conn.commit()
 
+MAX_KWARGS_LENGTH = 2048
+
+def safe_function_kwargs_dump(kwargs, max_bytes=MAX_KWARGS_LENGTH):
+    """
+    Safely generate JSON without simply cutting the string mid-way.
+    This returns valid JSON even if it's too large.
+    """
+    data_str = json.dumps(kwargs)
+    if len(data_str) > max_bytes:
+        # Provide a valid JSON object with an error message.
+        return json.dumps({"error": "function_kwargs too large to store. Max length is {} bytes.".format(max_bytes)})
+    return data_str
+
 def store_structured_log(log):
+    function_kwargs_json = safe_function_kwargs_dump(log.get('function_kwargs', {}))
+
     cursor.execute('''
     INSERT INTO structured_logs (timestamp, service, log_level, message, correlation_id, caller_module, caller_function, function_kwargs, custom_fields)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -62,7 +77,7 @@ def store_structured_log(log):
         log.get('correlation_id', ''),
         log.get('caller_module', ''),
         log.get('caller_function', ''),
-        json.dumps(log.get('function_kwargs', {})),
+        function_kwargs_json,
         json.dumps(log.get('custom_fields', {}))
     ))
     conn.commit()
@@ -112,19 +127,27 @@ def process_log(log, source):
 
 def tail_logs():
     last_processed_timestamp = get_last_processed_timestamp()
-    since_option = f"--since={last_processed_timestamp}" if last_processed_timestamp else ""
-    command = f"docker-compose logs -f {since_option}"
-    
-    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    
-    while True:
-        output = process.stdout.readline()
-        if output == b'' and process.poll() is not None:
-            break
-        if output:
-            process_log(output.decode('utf-8').strip(), 'docker-compose')
-    
-    update_last_processed_timestamp(datetime.utcnow().isoformat())
+    since_option = f"--since={last_processed_timestamp}" if last_processed_timestamp else None
+    command = f"docker-compose logs -f {since_option}" if since_option else "docker-compose logs -f"
+
+    try:
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        while True:
+            output = process.stdout.readline()
+            if output == b'' and process.poll() is not None:
+                break
+
+            if output:
+                new_timestamp = datetime.utcnow().isoformat()
+                try:
+                    process_log(output.decode('utf-8').strip(), 'docker-compose')
+                    update_last_processed_timestamp(new_timestamp)
+                except Exception as e:
+                    print(f"Error processing log: {e}")
+    finally:
+        if process:
+            process.terminate()
 
 if __name__ == '__main__':
     tail_logs()
