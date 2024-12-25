@@ -1,4 +1,4 @@
-from logger import log_info, log_debug, log_warning, log_error, log_critical
+from logger.logger import log_info, log_debug, log_warning, log_error, log_critical
 
 def example_function(param1, param2, optional_param=None):
     correlation_id = "123e4567-e89b-12d3-a456-426614174000"

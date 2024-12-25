@@ -1,12 +1,7 @@
-import docker
+import subprocess
 import sqlite3
 import json
 from datetime import datetime
-import inspect
-import sys
-
-# Initialize Docker client
-client = docker.from_env()
 
 # Connect to SQLite database
 conn = sqlite3.connect('logs.db')
@@ -83,28 +78,32 @@ def store_unstructured_log(log):
     ))
     conn.commit()
 
-def add_caller_info(log):
-    frame = sys._getframe(3)  # Go three frames up to get the caller
-    log['caller_module'] = frame.f_globals['__name__']
-    log['caller_function'] = frame.f_code.co_name
-
-    # Capture function arguments
-    try:
-        args, _, _, values = inspect.getargvalues(frame)
-        kwargs = {arg: values[arg] for arg in args}
-        log['function_kwargs'] = kwargs
-    except Exception:
-        log['function_kwargs'] = "Unable to extract kwargs"
-
-    return log
-
 def process_log(log, source):
     try:
+        # Extract the service name and JSON part of the log
+        if ' | ' in log:
+            service, log = log.split(' | ', 1)
+        else:
+            service = source
+        
         log_data = json.loads(log)
-        if 'service' in log_data and 'log_level' in log_data and 'message' in log_data:
+        if 'event' in log_data and 'level' in log_data:
             log_data['timestamp'] = datetime.utcnow().isoformat()
+            log_data['service'] = service.strip()
+            log_data['log_level'] = log_data['level']
+            log_data['message'] = log_data['event']
             log_data['custom_fields'] = log_data.get('custom_fields', {})
-            log_data = add_caller_info(log_data)
+            
+            # Include all additional keys in custom_fields
+            known_keys = {'timestamp', 'service', 'log_level', 'message', 'correlation_id', 'caller_module', 'caller_function', 'function_kwargs', 'custom_fields', 'event', 'level'}
+            function_kwargs = log_data.get('function_kwargs', {})
+            for key, value in log_data.items():
+                if key not in known_keys and key not in function_kwargs:
+                    log_data['custom_fields'][key] = value
+            
+            # Set function_kwargs separately
+            log_data['function_kwargs'] = function_kwargs
+            
             store_structured_log(log_data)
         else:
             store_unstructured_log({'timestamp': datetime.utcnow().isoformat(), 'source': source, 'log': log})
@@ -113,9 +112,18 @@ def process_log(log, source):
 
 def tail_logs():
     last_processed_timestamp = get_last_processed_timestamp()
-    for container in client.containers.list():
-        for line in container.logs(stream=True, since=last_processed_timestamp):
-            process_log(line.decode('utf-8').strip(), container.name)
+    since_option = f"--since={last_processed_timestamp}" if last_processed_timestamp else ""
+    command = f"docker-compose logs -f {since_option}"
+    
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    while True:
+        output = process.stdout.readline()
+        if output == b'' and process.poll() is not None:
+            break
+        if output:
+            process_log(output.decode('utf-8').strip(), 'docker-compose')
+    
     update_last_processed_timestamp(datetime.utcnow().isoformat())
 
 if __name__ == '__main__':
