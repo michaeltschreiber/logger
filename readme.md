@@ -132,6 +132,8 @@ Level mapping (Logfire numeric):
 
 ### Agent Read Tool (JSONL)
 
+JSONL output converts `level` to a severity string for readability.
+
 Use a CLI-friendly helper for agents or scripts:
 
 ```sh

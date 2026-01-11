@@ -78,6 +78,8 @@ Agent CLI helper:
 python scripts/logfire-read-agent.py --since 2026-01-11T00:00:00Z --message-like "Processing failed" --limit 10
 ```
 
+JSONL output converts `level` to a severity string for readability.
+
 ## Primary (Directly Used Here)
 
 - observability-engineer: defines the Logfire + Structlog "Perfect Logger" setup and environment routing.

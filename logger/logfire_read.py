@@ -19,6 +19,16 @@ def _escape_sql_literal(value):
 def _escape_like(value):
     return _escape_sql_literal(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
+def _level_name(level):
+    return {
+        1: "trace",
+        5: "debug",
+        9: "info",
+        13: "warn",
+        17: "error",
+        21: "fatal",
+    }.get(level, str(level))
+
 
 def _build_sql(
     *,
@@ -120,6 +130,10 @@ def query_logfire(
         columns = parsed.get("columns", [])
         names = [col.get("name") for col in columns]
         values = [col.get("values", []) for col in columns]
-        return [dict(zip(names, row)) for row in zip(*values)]
+        rows = [dict(zip(names, row)) for row in zip(*values)]
+        for row in rows:
+            if "level" in row and row["level"] is not None:
+                row["level"] = _level_name(row["level"])
+        return rows
 
     return parsed
