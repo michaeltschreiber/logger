@@ -5,7 +5,8 @@ import subprocess
 from datetime import datetime
 
 # Connect to SQLite database
-conn = sqlite3.connect('logs.db')
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs.db")
+conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 
 STRUCTURED_LOG_COLUMNS = [

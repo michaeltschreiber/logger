@@ -7,6 +7,7 @@ from .logger import (
     log_info,
     log_warning,
 )
+from .logfire_read import query_logfire
 
 __all__ = [
     "LOGGING_LEVEL",
@@ -16,4 +17,5 @@ __all__ = [
     "log_error",
     "log_info",
     "log_warning",
+    "query_logfire",
 ]

@@ -65,6 +65,14 @@ Logfire is enabled via environment variables so you can route data safely across
 - `LOGFIRE_TOKEN`: Required when `LOGFIRE_SEND_TO_LOGFIRE=true`.
 - `LOGFIRE_SERVICE_NAME`: Optional override for the Logfire service name (defaults to `logger`).
 
+Load `.env` before running locally:
+
+```sh
+set -a
+. ../.env
+set +a
+```
+
 ### Logging Functions
 
 The following logging functions are available:

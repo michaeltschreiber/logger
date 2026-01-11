@@ -54,6 +54,14 @@ Recommended modes:
 
 ### Mode Examples
 
+Load environment from `.env` before running locally:
+
+```sh
+set -a
+. ./.env
+set +a
+```
+
 Sensitive/local (stdout only):
 
 ```sh
@@ -75,6 +83,59 @@ Production-style (external OTel pipeline):
 export LOGFIRE_SEND_TO_LOGFIRE=false
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.example.com:4317
 python example_compose/test_logger.py
+```
+
+### Logfire Readback
+
+Set a Logfire read URL and token, then run the fetch script:
+
+```sh
+export LOGFIRE_READ_URL="https://logfire-us.pydantic.dev/v1/query"
+export LOGFIRE_READ_TOKEN=your_read_token
+export LOGFIRE_READ_HEADER=Authorization
+export LOGFIRE_READ_SCHEME=Bearer
+export LOGFIRE_READ_COLUMNS="created_at,start_timestamp,message,level,trace_id,span_id,span_name,attributes_reduced,attributes,service_name,project_id"
+export LOGFIRE_READ_LIMIT=20
+export LOGFIRE_READ_LEVEL=error
+export LOGFIRE_READ_MESSAGE_LIKE="Processing failed"
+export LOGFIRE_READ_JSONL=true
+python scripts/logfire-fetch.py
+```
+
+### Module Read API (JSONL)
+
+Use the module function to retrieve query results as JSONL records:
+
+```python
+from logger import query_logfire
+
+rows = query_logfire(jsonl=True)
+for row in rows:
+    print(row)
+```
+
+Optional filters:
+
+- `LOGFIRE_READ_SINCE=2026-01-11T00:00:00Z`
+- `LOGFIRE_READ_LEVEL=21`
+- `LOGFIRE_READ_MESSAGE_LIKE="Processing failed"`
+- `LOGFIRE_READ_TRACE_ID=<trace_id>`
+
+Level mapping (Logfire numeric):
+
+- `1` = `trace`
+- `5` = `debug`
+- `9` = `info`
+- `13` = `warn`
+- `17` = `error`
+- `21` = `fatal`
+
+### Agent Read Tool (JSONL)
+
+Use a CLI-friendly helper for agents or scripts:
+
+```sh
+python scripts/logfire-read-agent.py --since 2026-01-11T00:00:00Z --message-like "Processing failed" --limit 10
 ```
 
 ### Azure Monitor (Application Insights) Example

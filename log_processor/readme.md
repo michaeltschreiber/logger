@@ -50,6 +50,7 @@ This script, `log_processor.py`, is designed to process logs from Docker Compose
 
 The script connects to an SQLite database (`logs.db`) and creates the following tables if they do not exist:
 
+- **DB location**: `log_processor/logs.db` (written next to `log_processor.py`).
 - **structured_logs**: Stores structured logs with fields such as `timestamp`, `service`, `log_level`, `message`, `correlation_id`, `filename`, `func_name`, `lineno`, `request_id`, `user_id`, and `custom_fields`.
 - **unstructured_logs**: Stores unstructured logs with fields such as `timestamp`, `source`, and `log`.
 - **timestamp**: Stores the last processed timestamp to avoid duplicate log entries.

@@ -57,6 +57,27 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 python example_compose/test_logger.py
 ```
 
+## Logfire Read (Query API)
+
+The read path uses the Logfire query API with a read token and returns JSONL:
+
+```sh
+export LOGFIRE_READ_URL="https://logfire-us.pydantic.dev/v1/query"
+export LOGFIRE_READ_TOKEN=your_read_token
+export LOGFIRE_READ_COLUMNS="created_at,start_timestamp,message,level,trace_id,span_id,span_name,attributes_reduced,attributes,service_name,project_id"
+export LOGFIRE_READ_LIMIT=20
+export LOGFIRE_READ_LEVEL=error
+export LOGFIRE_READ_MESSAGE_LIKE="Processing failed"
+export LOGFIRE_READ_JSONL=true
+python scripts/logfire-fetch.py
+```
+
+Agent CLI helper:
+
+```sh
+python scripts/logfire-read-agent.py --since 2026-01-11T00:00:00Z --message-like "Processing failed" --limit 10
+```
+
 ## Primary (Directly Used Here)
 
 - observability-engineer: defines the Logfire + Structlog "Perfect Logger" setup and environment routing.
