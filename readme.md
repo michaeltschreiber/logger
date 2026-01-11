@@ -1,44 +1,146 @@
 # Logger Project
 
-This project provides a structured logging setup using the `structlog` library in Python. It is designed to capture structured logs from containerized applications, making it easy to import this module to satisfy logging as a cross-cutting concern. The project includes an example Docker Compose setup to demonstrate the logging and log processing capabilities.
+This project provides a structured logging setup using `structlog` and Logfire in Python. It is designed to capture structured logs from containerized applications, making it easy to import this module to satisfy logging as a cross-cutting concern while attaching logs to traces. The project includes an example Docker Compose setup to demonstrate logging and log processing.
+
+## Observability Showcase
+
+This repo is a focused demo of "Perfect Logger" patterns:
+
+- Logfire spans wrapping business work with structured Structlog events attached to traces.
+- Context propagation via `structlog.contextvars.bind_contextvars(...)`.
+- Callsite metadata (filename, function, line) via `CallsiteParameterAdder`.
+- Error handling that captures exceptions while preserving structured fields.
+- Environment-based routing for sensitive, dev, and production modes.
+
+The demo script at `example_compose/test_logger.py` exercises spans, contextvars, error logging, and multiple log levels in one run.
+
+## Use Cases
+
+- API request logging with correlation IDs and request context.
+- Background jobs with traceable spans and structured events.
+- ETL or batch processing with rich per-record metadata.
+- Containerized services forwarding stdout to a centralized pipeline.
+- Local debugging with trace context preserved in logs.
 
 ## Project Structure
 
 - **/example_compose**: Contains an example Docker Compose setup that demonstrates the use of the logging and log processing scripts. It includes a service that generates logs using `structlog` and a log processor that captures and stores these logs in an SQLite database.
 - **/log_processor**: Contains the `log_processor.py` script, which processes logs from Docker Compose services, parses them, and stores them in an SQLite database. It distinguishes between structured logs (from services using `structlog`) and unstructured logs, storing them in separate tables.
-- **/logger**: Contains the `logger.py` script, which provides a structured logging setup using the `structlog` library in Python. It includes functions for logging messages at different levels (INFO, DEBUG, WARNING, ERROR, CRITICAL) and captures additional context such as the caller module and function name, as well as custom key-value pairs and the argument values passed to the logging function.
+- **/logger**: Contains the `logger.py` script, which provides a structured logging setup using `structlog` and Logfire in Python. It includes functions for logging messages at different levels (INFO, DEBUG, WARNING, ERROR, FATAL) and captures callsite context and custom key-value pairs.
+- **/scripts**: Helper scripts to start/stop the Docker Compose demo with the correct env file.
+
+## Observability Guidance (Logfire + Structlog)
+
+We use the "Perfect Logger" pattern: Logfire orchestrates tracing and Structlog emits structured events that attach to the active span.
+
+- Logfire wraps Structlog: log events become span events, while stdout remains a backup path.
+- Always log with fields, not string formatting: `log.info("user_purchased_item", user_id=..., item_id=...)`.
+- Use request-scoped context with `structlog.contextvars.bind_contextvars(...)` so all logs inherit identifiers.
+- Callsite metadata is enabled via `CallsiteParameterAdder` for filename, function, and line number.
+
+#### Environment Routing
+
+Set these environment variables to route data safely:
+
+- `LOGFIRE_SEND_TO_LOGFIRE=false` (default): logs stay local/stdout.
+- `LOGFIRE_SEND_TO_LOGFIRE=true`: logs/traces sent to Logfire cloud (requires `LOGFIRE_TOKEN`).
+- `LOGFIRE_SERVICE_NAME`: optional override for service name (default `logger`).
+
+Recommended modes:
+
+- Sensitive/local: keep `LOGFIRE_SEND_TO_LOGFIRE=false`, use local OTel collector if needed.
+- Development: set `LOGFIRE_SEND_TO_LOGFIRE=true` with a write token.
+- Production: keep `LOGFIRE_SEND_TO_LOGFIRE=false` and export via your OTel/Azure pipeline.
+
+### Mode Examples
+
+Sensitive/local (stdout only):
+
+```sh
+export LOGFIRE_SEND_TO_LOGFIRE=false
+python example_compose/test_logger.py
+```
+
+Development (Logfire cloud):
+
+```sh
+export LOGFIRE_SEND_TO_LOGFIRE=true
+export LOGFIRE_TOKEN=your_write_token
+python example_compose/test_logger.py
+```
+
+Production-style (external OTel pipeline):
+
+```sh
+export LOGFIRE_SEND_TO_LOGFIRE=false
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.example.com:4317
+python example_compose/test_logger.py
+```
+
+### Azure Monitor (Application Insights) Example
+
+Use the Azure Monitor OpenTelemetry distro and route OTLP to Azure:
+
+```sh
+export LOGFIRE_SEND_TO_LOGFIRE=false
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://<region>.in.applicationinsights.azure.com
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=<your_connection_string_or_ikey>"
+python example_compose/test_logger.py
+```
+
+### Aspire Dashboard Standalone (Local Sensitive)
+
+Run the Aspire dashboard locally and point OTLP to it:
+
+```sh
+docker run --rm -d -p 18888:18888 -p 4317:18889 --name aspire-dashboard mcr.microsoft.com/dotnet/aspire-dashboard:latest
+export LOGFIRE_SEND_TO_LOGFIRE=false
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+python example_compose/test_logger.py
+```
+
+## PTM Fusion Personas
+
+This repo aligns most closely with the observability and backend personas (Logfire + Structlog). Full persona alignment notes are documented in `agents.md`.
 
 ## Prerequisites
 
-- Python 3.6 or higher
+- Python 3.8 or higher
 - Docker and Docker Compose
 
-## Installation
+## Quick Start (Local)
 
-1. **Clone the repository**
+1. **Create a virtual environment and activate it**
 
     ```sh
-    git clone https://github.com/yourusername/logger.git
-    cd logger
+    uv venv
+    source .venv/bin/activate
     ```
 
-2. **Create a virtual environment and activate it**
+2. **Install demo dependencies**
 
     ```sh
-    python -m venv .venv
-    .venv\Scripts\activate  # On Windows
-    # source .venv/bin/activate  # On macOS/Linux
+    uv pip install -r example_compose/requirements.txt
     ```
 
-3. **Install the required dependencies**
+3. **Run the demo script**
 
     ```sh
-    pip install -r requirements.txt
+    python example_compose/test_logger.py
     ```
 
 ## Usage
 
 ### Example Compose
+
+Use the helper scripts to start/stop the demo:
+
+```sh
+./scripts/compose-up.sh
+./scripts/compose-down.sh
+```
+
+To send traces to Logfire cloud, set `LOGFIRE_SEND_TO_LOGFIRE=true` and `LOGFIRE_TOKEN` in `.env` before running the scripts.
 
 1. **Navigate to the example_compose directory**
 
@@ -49,12 +151,12 @@ This project provides a structured logging setup using the `structlog` library i
 2. **Build and run the Docker Compose services**
 
     ```sh
-    docker-compose up --build
+    docker compose up --build
     ```
 
 3. **Run the log processor**
 
-    The `log_processor.py` script is meant to be run from the Docker host and is located in the `../log_processor` folder relative to this directory. Navigate to the [log_processor](http://_vscodecontentref_/1) folder and run the script:
+    The `log_processor.py` script is meant to be run from the Docker host and is located in the `../log_processor` folder relative to this directory:
 
     ```sh
     cd ../log_processor
@@ -63,7 +165,50 @@ This project provides a structured logging setup using the `structlog` library i
 
 ### Logger
 
-The `logger.py` script provides functions for logging messages at different levels (INFO, DEBUG, WARNING, ERROR, CRITICAL). Each function requires a `correlation_id` and a `message`. Additional parameters can be passed as keyword arguments.
+The `logger.py` script provides functions for logging messages at different levels (INFO, DEBUG, WARNING, ERROR, FATAL). Each function requires a `correlation_id` and a `message`. Additional parameters can be passed as keyword arguments.
+
+### Install as a Module (uv / uvx)
+
+This repo is packaged as a Python module (`ptm-logger`) for clean imports and CLI usage.
+
+Install locally with `uv`:
+
+```sh
+uv pip install -e .
+```
+
+Run the demo via `uvx`:
+
+```sh
+uvx --from . logger-demo
+```
+
+### Example: Structured Event
+
+```python
+from logger import log_info
+
+correlation_id = "c3a2a5c9-8ef8-4e0d-9c6a-7b0f420a2b50"
+log_info("user_login", user_id="user-42", org_id="org-9", correlation_id=correlation_id)
+```
+
+### Example: Request Context
+
+```python
+import structlog
+from logger import log_error
+
+structlog.contextvars.bind_contextvars(request_id="req-123", user_id="user-42")
+log_error("order_failed", order_id="order-77", reason="card_declined", correlation_id="corr-777")
+```
+
+#### Logfire Environment
+
+- `LOGFIRE_SEND_TO_LOGFIRE`: Set to `true` to send traces/logs to Logfire cloud. Default is `false`.
+- `LOGFIRE_TOKEN`: Required when `LOGFIRE_SEND_TO_LOGFIRE=true`.
+- `LOGFIRE_SERVICE_NAME`: Optional override for the Logfire service name (defaults to `logger`).
+
+The helper scripts (`./scripts/compose-up.sh`) load these values from the repo `.env`.
 
 #### Example
 

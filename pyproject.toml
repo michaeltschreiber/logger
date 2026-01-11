@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ptm-logger"
+version = "0.1.0"
+description = "Structlog + Logfire logging module with demo utilities."
+readme = "readme.md"
+requires-python = ">=3.8"
+dependencies = [
+  "logfire>=4.17.0",
+  "structlog>=25.5.0",
+]
+
+[project.scripts]
+logger-demo = "logger.demo:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["logger"]

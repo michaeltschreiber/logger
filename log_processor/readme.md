@@ -11,7 +11,7 @@ This script, `log_processor.py`, is designed to process logs from Docker Compose
 
 ## Prerequisites
 
-- Python 3.6 or higher
+- Python 3.8 or higher
 - Docker and Docker Compose
 - Required Python packages (listed in `requirements.txt`)
 
@@ -25,14 +25,13 @@ This script, `log_processor.py`, is designed to process logs from Docker Compose
 
 2. **Create a virtual environment and activate it**:
     ```sh
-    python -m venv .venv
-    .venv\Scripts\activate  # On Windows
-    # source .venv/bin/activate  # On macOS/Linux
+    uv venv
+    source .venv/bin/activate
     ```
 
 3. **Install the required dependencies**:
     ```sh
-    pip install -r requirements.txt
+    uv pip install -r requirements.txt
     ```
 
 ## Usage
@@ -51,7 +50,7 @@ This script, `log_processor.py`, is designed to process logs from Docker Compose
 
 The script connects to an SQLite database (`logs.db`) and creates the following tables if they do not exist:
 
-- **structured_logs**: Stores structured logs with fields such as `timestamp`, `service`, `log_level`, `message`, `correlation_id`, `caller_module`, `caller_function`, `function_kwargs`, and `custom_fields`.
+- **structured_logs**: Stores structured logs with fields such as `timestamp`, `service`, `log_level`, `message`, `correlation_id`, `filename`, `func_name`, `lineno`, `request_id`, `user_id`, and `custom_fields`.
 - **unstructured_logs**: Stores unstructured logs with fields such as `timestamp`, `source`, and `log`.
 - **timestamp**: Stores the last processed timestamp to avoid duplicate log entries.
 
@@ -62,7 +61,7 @@ The script connects to an SQLite database (`logs.db`) and creates the following 
 - **store_structured_log(log)**: Stores a structured log in the `structured_logs` table.
 - **store_unstructured_log(log)**: Stores an unstructured log in the `unstructured_logs` table.
 - **process_log(log, source)**: Processes a log line. If the log is in JSON format and contains the required fields (`event` and `level`), it is stored as a structured log. Otherwise, it is stored as an unstructured log.
-- **tail_logs()**: Uses the `docker-compose logs -f` command to tail the logs from Docker Compose. It processes each log line and updates the last processed timestamp.
+- **tail_logs()**: Uses the `docker compose logs -f` command with the repo compose file to tail logs and update the last processed timestamp.
 
 ### Example
 
@@ -74,14 +73,12 @@ Here is an example of how the logs are processed and stored:
         "correlation_id": "123e4567-e89b-12d3-a456-426614174000",
         "custom_key": "custom_value",
         "event": "Critical log from example_function",
-        "level": "critical",
-        "caller_module": "__main__",
-        "caller_function": "example_function",
-        "function_kwargs": {
-            "param1": "value1",
-            "param2": "value2",
-            "optional_param": "optional_value"
-        }
+        "level": "fatal",
+        "filename": "example.py",
+        "func_name": "example_function",
+        "lineno": 12,
+        "request_id": "req-9f7c2a",
+        "user_id": "user-42"
     }
     ```
 

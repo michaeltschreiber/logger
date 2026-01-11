@@ -1,11 +1,26 @@
-import subprocess
-import sqlite3
 import json
+import os
+import sqlite3
+import subprocess
 from datetime import datetime
 
 # Connect to SQLite database
 conn = sqlite3.connect('logs.db')
 cursor = conn.cursor()
+
+STRUCTURED_LOG_COLUMNS = [
+    ("timestamp", "TEXT"),
+    ("service", "TEXT"),
+    ("log_level", "TEXT"),
+    ("message", "TEXT"),
+    ("correlation_id", "TEXT"),
+    ("filename", "TEXT"),
+    ("func_name", "TEXT"),
+    ("lineno", "INTEGER"),
+    ("request_id", "TEXT"),
+    ("user_id", "TEXT"),
+    ("custom_fields", "TEXT"),
+]
 
 # Create tables if they don't exist
 cursor.execute('''
@@ -16,9 +31,11 @@ CREATE TABLE IF NOT EXISTS structured_logs (
     log_level TEXT,
     message TEXT,
     correlation_id TEXT,
-    caller_module TEXT,
-    caller_function TEXT,
-    function_kwargs TEXT,
+    filename TEXT,
+    func_name TEXT,
+    lineno INTEGER,
+    request_id TEXT,
+    user_id TEXT,
     custom_fields TEXT
 )
 ''')
@@ -41,6 +58,16 @@ CREATE TABLE IF NOT EXISTS timestamp (
 
 conn.commit()
 
+def ensure_structured_log_columns():
+    cursor.execute('PRAGMA table_info(structured_logs)')
+    existing = {row[1] for row in cursor.fetchall()}
+    for name, col_type in STRUCTURED_LOG_COLUMNS:
+        if name not in existing:
+            cursor.execute(f'ALTER TABLE structured_logs ADD COLUMN {name} {col_type}')
+    conn.commit()
+
+ensure_structured_log_columns()
+
 def get_last_processed_timestamp():
     cursor.execute('SELECT last_processed FROM timestamp WHERE id=1')
     row = cursor.fetchone()
@@ -50,34 +77,21 @@ def update_last_processed_timestamp(timestamp):
     cursor.execute('INSERT OR REPLACE INTO timestamp (id, last_processed) VALUES (?, ?)', (1, timestamp))
     conn.commit()
 
-MAX_KWARGS_LENGTH = 2048
-
-def safe_function_kwargs_dump(kwargs, max_bytes=MAX_KWARGS_LENGTH):
-    """
-    Safely generate JSON without simply cutting the string mid-way.
-    This returns valid JSON even if it's too large.
-    """
-    data_str = json.dumps(kwargs)
-    if len(data_str) > max_bytes:
-        # Provide a valid JSON object with an error message.
-        return json.dumps({"error": "function_kwargs too large to store. Max length is {} bytes.".format(max_bytes)})
-    return data_str
-
 def store_structured_log(log):
-    function_kwargs_json = safe_function_kwargs_dump(log.get('function_kwargs', {}))
-
     cursor.execute('''
-    INSERT INTO structured_logs (timestamp, service, log_level, message, correlation_id, caller_module, caller_function, function_kwargs, custom_fields)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO structured_logs (timestamp, service, log_level, message, correlation_id, filename, func_name, lineno, request_id, user_id, custom_fields)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
-        log['timestamp'],
-        log['service'],
-        log['log_level'],
-        log['message'],
+        log.get('timestamp', ''),
+        log.get('service', ''),
+        log.get('log_level', ''),
+        log.get('message', ''),
         log.get('correlation_id', ''),
-        log.get('caller_module', ''),
-        log.get('caller_function', ''),
-        function_kwargs_json,
+        log.get('filename', ''),
+        log.get('func_name', ''),
+        log.get('lineno', None),
+        log.get('request_id', ''),
+        log.get('user_id', ''),
         json.dumps(log.get('custom_fields', {}))
     ))
     conn.commit()
@@ -108,16 +122,29 @@ def process_log(log, source):
             log_data['log_level'] = log_data['level']
             log_data['message'] = log_data['event']
             log_data['custom_fields'] = log_data.get('custom_fields', {})
-            
+            if 'function_kwargs' in log_data:
+                log_data['custom_fields']['function_kwargs'] = log_data['function_kwargs']
+
             # Include all additional keys in custom_fields
-            known_keys = {'timestamp', 'service', 'log_level', 'message', 'correlation_id', 'caller_module', 'caller_function', 'function_kwargs', 'custom_fields', 'event', 'level'}
-            function_kwargs = log_data.get('function_kwargs', {})
+            known_keys = {
+                'timestamp',
+                'service',
+                'log_level',
+                'message',
+                'correlation_id',
+                'filename',
+                'func_name',
+                'lineno',
+                'request_id',
+                'user_id',
+                'custom_fields',
+                'event',
+                'level',
+                'function_kwargs',
+            }
             for key, value in log_data.items():
-                if key not in known_keys and key not in function_kwargs:
+                if key not in known_keys:
                     log_data['custom_fields'][key] = value
-            
-            # Set function_kwargs separately
-            log_data['function_kwargs'] = function_kwargs
             
             store_structured_log(log_data)
         else:
@@ -127,11 +154,14 @@ def process_log(log, source):
 
 def tail_logs():
     last_processed_timestamp = get_last_processed_timestamp()
-    since_option = f"--since={last_processed_timestamp}" if last_processed_timestamp else None
-    command = f"docker-compose logs -f {since_option}" if since_option else "docker-compose logs -f"
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    compose_file = os.path.normpath(os.path.join(repo_root, '..', 'example_compose', 'docker-compose.yml'))
+    command = ["docker", "compose", "-f", compose_file, "logs", "-f"]
+    if last_processed_timestamp:
+        command.extend(["--since", last_processed_timestamp])
 
     try:
-        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         while True:
             output = process.stdout.readline()

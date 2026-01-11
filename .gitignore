@@ -1,1 +1,8 @@
-__pycache__/logger.cpython-311.pyc
+.env
+.venv/
+.uv-cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+logs.db

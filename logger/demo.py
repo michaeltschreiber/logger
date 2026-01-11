@@ -3,14 +3,14 @@ import time
 import logfire
 import structlog
 
-from logger import log_info, log_debug, log_warning, log_error, log_critical
+from .logger import log_critical, log_debug, log_error, log_info, log_warning
 
-def simulate_workload(correlation_id):
+
+def _simulate_workload(correlation_id):
     with logfire.span("simulate_workload", task="demo", stage="start"):
         log_debug(
             correlation_id,
             "Preparing inputs",
-            custom_key="custom_value",
             input_count=3,
         )
         time.sleep(0.1)
@@ -30,24 +30,19 @@ def simulate_workload(correlation_id):
 
         log_info(correlation_id, "Processing complete", processed=1, failed=1)
 
-def example_function(param1, param2, optional_param=None):
+
+def main():
     correlation_id = "123e4567-e89b-12d3-a456-426614174000"
     structlog.contextvars.bind_contextvars(
         request_id="req-9f7c2a",
         user_id="user-42",
     )
 
-    with logfire.span("example_function", param1=param1, param2=param2):
-        log_info(
-            correlation_id,
-            "Info log from example_function",
-            custom_key="custom_value",
-        )
-        simulate_workload(correlation_id)
-        log_critical(
-            correlation_id,
-            "Critical log from example_function",
-            custom_key="custom_value",
-        )
+    with logfire.span("demo_run", component="logger-demo"):
+        log_info(correlation_id, "Demo run starting", env="local")
+        _simulate_workload(correlation_id)
+        log_critical(correlation_id, "Demo run finished")
 
-example_function("value1", "value2", optional_param="optional_value")
+
+if __name__ == "__main__":
+    main()
