@@ -230,6 +230,39 @@ To send traces to Logfire cloud, set `LOGFIRE_SEND_TO_LOGFIRE=true` and `LOGFIRE
 
 The `logger.py` script provides functions for logging messages at different levels (INFO, DEBUG, WARNING, ERROR, FATAL). Each function requires a `correlation_id` and a `message`. Additional parameters can be passed as keyword arguments.
 
+### Real-World Use (Not Just the Demo)
+
+The demo scripts are just test harnesses. You can use this module directly in production services to emit structured logs and query them back from Logfire.
+
+Logging in your app:
+
+```python
+from logger import log_info, log_error
+
+def handle_request(request_id, user_id):
+    log_info(
+        request_id,
+        "request_started",
+        user_id=user_id,
+        route="/health",
+    )
+    try:
+        # ... real work ...
+        log_info(request_id, "request_success", user_id=user_id)
+    except Exception as exc:
+        log_error(request_id, "request_failed", user_id=user_id, error=str(exc))
+```
+
+Query logs from Logfire:
+
+```python
+from logger import query_logfire
+
+rows = query_logfire(jsonl=True, message_like="request_failed", limit=20)
+for row in rows:
+    print(row)
+```
+
 ### Install as a Module (uv / uvx)
 
 This repo is packaged as a Python module (`ptm-logger`) for clean imports and CLI usage.
